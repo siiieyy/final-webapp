@@ -4,66 +4,18 @@
     <meta charset="UTF-8">
     <title>Smart Chicken Coop Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background-color: #f4f4f4;
-        }
-        h1 {
-            margin-top: 20px;
-        }
-        .dashboard {
-            margin: auto;
-            width: 80%;
-            padding: 20px;
-        }
-        .sensor-readings {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin: 20px 0;
-        }
-        .card {
-            background: #fff;
-            border-radius: 10px;
-            padding: 20px;
-            width: 200px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        }
-        .value {
-            font-size: 2rem;
-            font-weight: bold;
-        }
-        .error {
-            color: red;
-            margin: 10px 0;
-        }
-        .timestamp {
-            font-size: 0.9rem;
-            color: #555;
-        }
-        #video-feed {
-            margin-top: 30px;
-            border: 3px solid #333;
-        }
-        #open-beak-status {
-            font-size: 1.5rem;
-            margin-top: 10px;
-            color: darkred;
-        }
-    </style>
 </head>
 <body>
-
-    <h1>Smart Chicken Coop Dashboard</h1>
-
     <div class="dashboard">
+        <h1>Smart Chicken Coop Dashboard</h1>
+
+        <!-- Sensor Readings Section -->
         <div class="sensor-readings">
             <div class="card temp">
                 <h2>Temperature</h2>
                 <div class="value" id="temperature">--.- °C</div>
             </div>
+
             <div class="card humi">
                 <h2>Humidity</h2>
                 <div class="value" id="humidity">--.- %</div>
@@ -73,36 +25,53 @@
         <div class="error" id="error"></div>
         <div class="timestamp">Last update: <span id="timestamp">--:--:--</span></div>
 
+        <!-- Open Beak Detection Section -->
         <div id="open-beak-status">Open Beak: 0</div>
-        <img id="video-feed" src="{{ url_for('video_feed') }}" width="720" />
+        <img id="video-feed" src="{{ url_for('video_feed') }}" alt="Live Feed">
     </div>
 
     <script>
-        async function updateSensorData() {
+        // Update sensor readings
+        async function fetchSensorData() {
             try {
-                const res = await fetch("/api/data?_=" + new Date().getTime());
+                const res = await fetch("/api/data");
                 const data = await res.json();
-                document.getElementById("temperature").innerText = data.temperature.toFixed(1) + " °C";
-                document.getElementById("humidity").innerText = data.humidity.toFixed(1) + " %";
+
+                document.getElementById("temperature").innerText = data.temperature + " °C";
+                document.getElementById("humidity").innerText = data.humidity + " %";
                 document.getElementById("timestamp").innerText = data.timestamp;
-                document.getElementById("error").innerText = data.error || "";
-            } catch (e) {
-                document.getElementById("error").innerText = "Failed to fetch sensor data";
+
+                const errorDiv = document.getElementById("error");
+                if (data.error) {
+                    errorDiv.innerText = data.error;
+                    errorDiv.style.display = "block";
+                } else {
+                    errorDiv.style.display = "none";
+                }
+            } catch (err) {
+                console.error("Failed to fetch sensor data:", err);
             }
         }
 
-        async function updateOpenBeakStatus() {
+        // Update open beak count
+        async function updateBeakStatus() {
             try {
-                const res = await fetch("/status?_=" + new Date().getTime());
+                const res = await fetch("/status?_=" + new Date().getTime());  // cache-bypass
                 const data = await res.json();
                 document.getElementById("open-beak-status").innerText = "Open Beak: " + data.count;
             } catch (e) {
+                console.error("Failed to fetch open beak count:", e);
                 document.getElementById("open-beak-status").innerText = "Open Beak: ?";
             }
         }
 
-        setInterval(updateSensorData, 2000);  // every 2 seconds
-        setInterval(updateOpenBeakStatus, 500);  // every 0.5 seconds
+        // Set polling intervals
+        setInterval(fetchSensorData, 3000); // every 3 seconds
+        setInterval(updateBeakStatus, 500); // every 0.5 seconds
+
+        // Initial call
+        fetchSensorData();
+        updateBeakStatus();
     </script>
 </body>
 </html>
