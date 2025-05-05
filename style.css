@@ -1,0 +1,83 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+.dashboard {
+    max-width: 800px;
+    margin: 0 auto;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: #333;
+    text-align: center;
+}
+
+.sensor-readings {
+    display: flex;
+    justify-content: space-between;
+    margin: 30px 0;
+}
+
+.card {
+    flex: 1;
+    padding: 20px;
+    text-align: center;
+    border-radius: 8px;
+}
+
+.temp {
+    background-color: #ffebee;
+    margin-right: 10px;
+}
+
+.humi {
+    background-color: #e3f2fd;
+    margin-left: 10px;
+}
+
+.value {
+    font-size: 2.5em;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.error {
+    color: #d32f2f;
+    padding: 10px;
+    background-color: #ffebee;
+    border-radius: 4px;
+    margin: 10px 0;
+    display: none;
+}
+
+.timestamp {
+    text-align: right;
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* Open Beak Detection Styling */
+#video-feed {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 720px;
+    border: 3px solid #333;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 4px;
+}
+
+#open-beak-status {
+    font-size: 1.8em;
+    color: darkred;
+    margin: 20px 0;
+    text-align: center;
+}
