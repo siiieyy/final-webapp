@@ -1,22 +1,86 @@
-from flask import Flask, render_template, jsonify, Response
-from smbus2 import SMBus, i2c_msg
-import time
-import threading
+from flask import Flask, render_template, Response, jsonify
 import cv2
-from detection.model import detect_open_beak_from_frame  # Assuming your model is here
+from ultralytics import YOLO
+import threading
+import time
+from smbus2 import SMBus, i2c_msg
 
 app = Flask(__name__)
 
-# ===================== Sensor Configuration =====================
+# Camera initialization
+def init_camera():
+    # Try different camera indices and backends
+    for index in [0, 1, 2]:
+        for backend in [cv2.CAP_V4L2, cv2.CAP_ANY]:
+            cap = cv2.VideoCapture(index, backend)
+            if cap.isOpened():
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                print(f"Successfully opened camera at index {index} with backend {backend}")
+                return cap
+            cap.release()
+    raise RuntimeError("Could not open any camera")
+
+try:
+    cap = init_camera()
+except RuntimeError as e:
+    print(f"Camera initialization failed: {e}")
+    cap = None
+
+# Load YOLO model
+model = YOLO("/home/team1/Desktop/chicken monitoring/detection/best.pt") if cap else None
+
+# Global variables for camera/detection
+latest_frame = None
+lock = threading.Lock()
+detection_active = True
+open_beak_count = 0
+
+# SHT20 Sensor configuration
 SHT20_I2C_ADDR = 0x40
 TRIG_TEMP_NOHOLD = 0xF3
 TRIG_HUMI_NOHOLD = 0xF5
 SOFT_RESET = 0xFE
 
+# Global variables for sensor
 current_temp = 0.0
 current_hum = 0.0
 sensor_error = None
 
+def generate_frames():
+    global latest_frame, open_beak_count
+    while cap and cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to read frame")
+            time.sleep(0.1)
+            continue
+            
+        if detection_active and model:
+            with lock:
+                try:
+                    results = model(frame, verbose=False)
+                    # Count open beaks (assuming class 0 is 'open_beak')
+                    current_count = sum(1 for box in results[0].boxes if box.cls == 0)
+                    open_beak_count = current_count
+                    
+                    annotated_frame = results[0].plot()  # This keeps only the detection boxes
+                    latest_frame = annotated_frame
+                except Exception as e:
+                    print(f"Detection error: {e}")
+                    latest_frame = frame
+        else:
+            with lock:
+                latest_frame = frame
+                # Reset count when detection is off
+                open_beak_count = 0
+                
+        ret, buffer = cv2.imencode('.jpg', latest_frame)
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+# SHT20 Sensor functions
 def sht20_reset():
     try:
         with SMBus(1) as bus:
@@ -67,47 +131,43 @@ def sensor_loop():
             sht20_reset()
         time.sleep(2)
 
-# ===================== Open Beak Detection =====================
-camera = cv2.VideoCapture(0)
-open_beak_state = {"count": 0}
+# Start sensor thread
+sensor_thread = threading.Thread(target=sensor_loop, daemon=True)
+sensor_thread.start()
 
-def generate_frames():
-    while True:
-        success, frame = camera.read()
-        if not success:
-            break
-        count, annotated_frame = detect_open_beak_from_frame(frame)
-        open_beak_state["count"] = count
-        ret, buffer = cv2.imencode('.jpg', annotated_frame)
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-
-# ===================== Routes =====================
+# Flask routes
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/api/data')
-def get_sensor_data():
-    return jsonify({
-        'temperature': current_temp,
-        'humidity': current_hum,
-        'error': sensor_error,
-        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
-    })
-
 @app.route('/video_feed')
 def video_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    if not cap:
+        return "Camera not available", 503
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/status')
-def status():
-    return jsonify(open_beak_state)
+@app.route('/toggle_detection', methods=['POST'])
+def toggle_detection():
+    global detection_active
+    detection_active = not detection_active
+    return {'status': 'success', 'detection_active': detection_active}
 
-# ===================== App Start =====================
+@app.route('/get_beak_count')
+def get_beak_count():
+    return {'count': open_beak_count}
+
+@app.route('/get_sensor_data')
+def get_sensor_data():
+    return {
+        'temperature': current_temp,
+        'humidity': current_hum,
+        'error': sensor_error
+    }
+
 if __name__ == '__main__':
-    sensor_thread = threading.Thread(target=sensor_loop)
-    sensor_thread.daemon = True
-    sensor_thread.start()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    try:
+        app.run(host='0.0.0.0', port=5000, threaded=True)
+    finally:
+        if cap:
+            cap.release()
