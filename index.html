@@ -9,13 +9,12 @@
     <div class="dashboard">
         <h1>Smart Chicken Coop Dashboard</h1>
 
-        <!-- Sensor Readings Section -->
+        <!-- Sensor Readings -->
         <div class="sensor-readings">
             <div class="card temp">
                 <h2>Temperature</h2>
                 <div class="value" id="temperature">--.- °C</div>
             </div>
-
             <div class="card humi">
                 <h2>Humidity</h2>
                 <div class="value" id="humidity">--.- %</div>
@@ -25,53 +24,11 @@
         <div class="error" id="error"></div>
         <div class="timestamp">Last update: <span id="timestamp">--:--:--</span></div>
 
-        <!-- Open Beak Detection Section -->
-        <div id="open-beak-status">Open Beak: 0</div>
+        <!-- Open Beak Detection -->
+        <div id="status">Open Beak: 0</div>
         <img id="video-feed" src="{{ url_for('video_feed') }}" alt="Live Feed">
     </div>
 
-    <script>
-        // Update sensor readings
-        async function fetchSensorData() {
-            try {
-                const res = await fetch("/api/data");
-                const data = await res.json();
-
-                document.getElementById("temperature").innerText = data.temperature + " °C";
-                document.getElementById("humidity").innerText = data.humidity + " %";
-                document.getElementById("timestamp").innerText = data.timestamp;
-
-                const errorDiv = document.getElementById("error");
-                if (data.error) {
-                    errorDiv.innerText = data.error;
-                    errorDiv.style.display = "block";
-                } else {
-                    errorDiv.style.display = "none";
-                }
-            } catch (err) {
-                console.error("Failed to fetch sensor data:", err);
-            }
-        }
-
-        // Update open beak count
-        async function updateBeakStatus() {
-            try {
-                const res = await fetch("/status?_=" + new Date().getTime());  // cache-bypass
-                const data = await res.json();
-                document.getElementById("open-beak-status").innerText = "Open Beak: " + data.count;
-            } catch (e) {
-                console.error("Failed to fetch open beak count:", e);
-                document.getElementById("open-beak-status").innerText = "Open Beak: ?";
-            }
-        }
-
-        // Set polling intervals
-        setInterval(fetchSensorData, 3000); // every 3 seconds
-        setInterval(updateBeakStatus, 500); // every 0.5 seconds
-
-        // Initial call
-        fetchSensorData();
-        updateBeakStatus();
-    </script>
+    <script src="/static/script.js"></script>
 </body>
 </html>
