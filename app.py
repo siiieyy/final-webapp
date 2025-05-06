@@ -7,6 +7,7 @@ import threading
 import time
 import numpy as np
 from smbus2 import SMBus, i2c_msg
+import RPi.GPIO as GPIO
 
 # Add YOLOv5 directory to path
 FILE = Path(__file__).resolve()
@@ -24,6 +25,15 @@ SHT20_I2C_ADDR = 0x40
 TRIG_TEMP_NOHOLD = 0xF3
 TRIG_HUMI_NOHOLD = 0xF5
 SOFT_RESET = 0xFE
+
+# GPIO setup for relays
+RELAY_PINS = [17, 27, 22, 23]
+TEMP_THRESHOLD = 30.0
+
+GPIO.setmode(GPIO.BCM)
+for pin in RELAY_PINS:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, GPIO.HIGH)  # Active LOW relays: OFF initially
 
 # Sensor globals
 current_temp = 0.0
@@ -74,8 +84,17 @@ def sensor_loop():
             if hum_err:
                 raise IOError(hum_err)
             current_temp = temp
-            current_hum = hum
+            current_hum = min(hum, 100.0)
             sensor_error = None
+
+            # Relay control logic
+            if current_temp >= TEMP_THRESHOLD:
+                for pin in RELAY_PINS:
+                    GPIO.output(pin, GPIO.LOW)  # Turn ON (active LOW)
+            else:
+                for pin in RELAY_PINS:
+                    GPIO.output(pin, GPIO.HIGH)  # Turn OFF
+
         except Exception as e:
             sensor_error = f"Sensor error: {str(e)}"
             print(sensor_error)
@@ -135,14 +154,13 @@ def detect(frame):
     pred = model(img, augment=False)[0]
     pred = non_max_suppression(pred, 0.25, 0.45, classes=None, agnostic=False)
 
-    count = 0  # Local counter for this frame
-
+    count = 0
     for i, det in enumerate(pred):
         if len(det):
             det[:, :4] = scale_boxes(img.shape[2:], det[:, :4], frame.shape).round()
             for *xyxy, conf, cls in reversed(det):
                 cls_int = int(cls)
-                if cls_int == 0:  # Assuming class 0 = open beak
+                if cls_int == 0:  # class 0 = open beak
                     count += 1
                 label = f'{names[cls_int]} {conf:.2f}'
                 annotator.box_label(xyxy, label, color=colors(cls_int, True))
@@ -162,7 +180,7 @@ def generate_frames():
             with lock:
                 try:
                     processed_frame, count = detect(frame.copy())
-                    open_beak_count = count  # Update the shared variable
+                    open_beak_count = count
                     latest_frame = processed_frame
                 except Exception as e:
                     print(f"Detection error: {e}")
@@ -206,9 +224,18 @@ def get_sensor_data():
         'error': sensor_error
     }
 
+@app.route('/relay_status')
+def relay_status():
+    try:
+        relay_states = [GPIO.input(pin) == GPIO.LOW for pin in RELAY_PINS]  # True = ON (active LOW)
+        return {'relay_states': relay_states}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=5000, threaded=True)
     finally:
         if cap:
             cap.release()
+        GPIO.cleanup()
