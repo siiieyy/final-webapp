@@ -81,7 +81,6 @@
             border: none;
             padding: 12px 20px;
             text-align: center;
-            text-decoration: none;
             display: inline-block;
             font-size: 16px;
             margin: 10px 0;
@@ -119,21 +118,21 @@
         <div class="header">
             <h1>Chicken Monitoring System</h1>
         </div>
-        
+
         <div class="content">
             <div class="video-container">
                 <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live Feed">
             </div>
-            
+
             <div class="controls">
                 <h2>Monitoring Controls</h2>
-                
+
                 <div id="detectionStatus" class="detection-status active">
                     Detection: ACTIVE
                 </div>
-                
+
                 <button id="toggleDetection">Toggle Detection</button>
-                
+
                 <div class="count-display">
                     <h3>Open Beak Count</h3>
                     <div class="data-item">
@@ -141,7 +140,7 @@
                         <span id="beakCount" class="count-value">0</span>
                     </div>
                 </div>
-                
+
                 <div class="sensor-data">
                     <h3>Environmental Data</h3>
                     <div class="data-item">
@@ -154,18 +153,23 @@
                     </div>
                     <div id="sensorError" class="error"></div>
                 </div>
+
+                <div class="sensor-data">
+                    <h3>Relay Status</h3>
+                    <div class="data-item">
+                        <span>Relays:</span>
+                        <span id="relayStatus" class="data-value">Checking...</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Function to toggle detection
-        document.getElementById('toggleDetection').addEventListener('click', function() {
+        document.getElementById('toggleDetection').addEventListener('click', function () {
             fetch('/toggle_detection', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
+                headers: { 'Content-Type': 'application/json' }
             })
             .then(response => response.json())
             .then(data => {
@@ -181,7 +185,6 @@
             .catch(error => console.error('Error:', error));
         });
 
-        // Function to update beak count
         function updateBeakCount() {
             fetch('/get_beak_count')
                 .then(response => response.json())
@@ -191,14 +194,13 @@
                 .catch(error => console.error('Error:', error));
         }
 
-        // Function to update sensor data
         function updateSensorData() {
             fetch('/get_sensor_data')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('temperature').textContent = data.temperature + " °C";
                     document.getElementById('humidity').textContent = data.humidity + " %";
-                    
+
                     const errorElement = document.getElementById('sensorError');
                     if (data.error) {
                         errorElement.textContent = data.error;
@@ -212,13 +214,27 @@
                 });
         }
 
-        // Update data periodically
+        function updateRelayStatus() {
+            fetch('/relay_status')
+                .then(response => response.json())
+                .then(data => {
+                    const states = data.relay_states;
+                    const onCount = states.filter(s => s).length;
+                    document.getElementById('relayStatus').textContent = `${onCount} ON / ${states.length} total`;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('relayStatus').textContent = "Error";
+                });
+        }
+
         setInterval(updateBeakCount, 1000);
         setInterval(updateSensorData, 2000);
+        setInterval(updateRelayStatus, 2000);
 
-        // Initial update
         updateBeakCount();
         updateSensorData();
+        updateRelayStatus();
     </script>
 </body>
 </html>
